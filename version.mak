@@ -1,0 +1,9 @@
+
+VER_MAJOR =    0
+VER_MINOR =    0
+VER_REVISION = 1
+
+DATE=$(shell date +%y%m%d)
+
+VER=$(VER_MAJOR).$(VER_MINOR).$(VER_REVISION)
+VER_DATE="$(VER_MAJOR).$(VER_MINOR).$(VER_REVISION).$(DATE)"
