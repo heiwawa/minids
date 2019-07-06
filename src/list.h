@@ -12,9 +12,12 @@
 extern "C" {
 #endif
 
+#ifndef MINIDS_ERROR
+#define MINIDS_ERROR
 #define M_EINVAL    (-1) /* invalid arguments */
 #define M_EUNKNOWN  (-2) /* unknown error */
 #define M_ENOTFOUND (-3) /* not found */
+#endif
 
 /*******************************************************
  * @brief   calculate listnode offset in element, just use for m_list_init()

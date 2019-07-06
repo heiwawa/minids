@@ -1,24 +1,28 @@
 
-SUB_DIRS:=$(shell ls -l | grep ^d | awk '{print $$9}')
-CUR_SOURCE:=${wildcard *.c}
-CUR_OBJS:=${patsubst %.c, %.o, $(CUR_SOURCE)}
+CC:= gcc
 
+INCLUDE+=
+CFLAGS+=
+LDFLAGS+=
 LIBS+=
 
-all:$(SUB_DIRS) $(CUR_OBJS)
+SRCS:= $(wildcard *.c)
+OBJS:= $(patsubst %.c,%.o, $(SRCS))
 
-$(CUR_OBJS):%.o:%.c
-	$(CC) $(CFLAGS) -c $^ -o $@ $(LDFLAGS) $(LIBS)
+all:$(OBJS)
 
-$(SUB_DIRS):ECHO
-	make -C $@
+%.o:%.c
+	$(CC) $(CFLAGS) -o $@ -c $< $(LDFLAGS) $(LIBS)
 
-ECHO:
-	@echo $(SUBDIRS)
+%.d:%.c %.h
+	@set -e; rm -f $@; \
+	$(CC) -MM  $< > $@.$$$$; \
+	sed 's,/($*/)/.o[ :]*,/1.o $@ : ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
+
+-include $(SRCS:.c=.d)
 
 clean:
-	rm -f *.o
+	rm -f *.o *.d
 
-distclean: clean
-
-.PHONY:all ECHO clean distclean
+.PHONY:all clean

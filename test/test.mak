@@ -1,26 +1,33 @@
 
-SUB_DIRS:=$(shell ls -l | grep ^d | awk '{print $$9}')
-CUR_SOURCE:=${wildcard *.c}
-CUR_OBJS:=${patsubst %.c, %.o, $(CUR_SOURCE)}
+CC:= gcc
 
-LDFLAGS+=-L..
-LIBS+=-lminids-$(VER)
+INCLUDE+=../src
+CFLAGS+=-I$(INCLUDE)
+LDFLAGS+=
+LIBS+=
 
-all:$(SUB_DIRS) $(CUR_OBJS)
+SRCS:=$(wildcard *.c)
+OBJS:=$(patsubst %.c,%.o, $(SRCS))
+TARGET:=$(patsubst %.c,%.out, $(SRCS))
 
-$(CUR_OBJS):%.o:%.c
-	$(CC) $(CFLAGS) -c $^ -o $@
-	$(CC) $(CFLAGS) $@ -o ${patsubst %.o,%.out, $@} $(LDFLAGS) $(LIBS)
+all:$(TARGET)
 
-$(SUB_DIRS):ECHO
-	make -C $@
- 
-ECHO:
-	@echo $(SUBDIRS)
+%.out:%.o
+	$(CC) $(CFLAGS) -o $@ $< ../src/$(patsubst test_%.o,%.o, $<) $(LDFLAGS) $(LIBS)
+
+%.o:%.c
+	$(CC) $(CFLAGS) -o $@ -c $< $(LDFLAGS) $(LIBS)
+
+%.d:%.c
+	@set -e; rm -f $@; \
+	$(CC) $(CFLAGS) -MM $< > $@.$$$$; \
+	sed -i 's/$$/ ..\/src\/$(patsubst test_%.c,%.c, $<)/' $@.$$$$; \
+	sed 's,/($*/)/.o[ :]*,/1.o $@ : ,g' < $@.$$$$ > $@; \
+	rm -f $@.$$$$
+
+-include $(SRCS:.c=.d)
 
 clean:
-	rm -f *.o *.out
+	rm -f *.o *.d *.out
 
-distclean: clean
-
-.PHONY:all ECHO clean distclean
+.PHONY:all clean
