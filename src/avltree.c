@@ -19,6 +19,190 @@
 *********************************************************/
 #define NODE2ELEM(NODE,OFFSET) ((void *)((size_t)(NODE) - (OFFSET)))
 
+/* left child height */
+#define LEFT_HEIGHT(node) (((node)->left)? ((node)->left)->height : 0)
+/* right child height */
+#define RIGHT_HEIGHT(node) (((node)->right)? ((node)->right)->height : 0)
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#define ABS(a) (((a) < 0) ? -(a) : (a))
+#define HEIGHT_RESET(node) \
+            (node->height = MAX(LEFT_HEIGHT(node),RIGHT_HEIGHT(node)) + 1)
+
+#define PARENT_RESET(root,parent,node,newnode) \
+    do { \
+        if (parent) { \
+            if (parent->left == node) \
+                parent->left = newnode; \
+            else \
+                parent->right = newnode; \
+        } else { \
+            *root = newnode; \
+        } \
+    } while (0)
+
+#ifndef inline
+#define inline __inline
+#endif
+
+static inline struct m_avlnode * left_rotate(struct m_avlnode *node,
+                    struct m_avlnode **root)
+{
+    struct m_avlnode *right = node->right;
+	struct m_avlnode *parent = node->parent;
+    
+	node->right = right->left;
+	if (node->right) node->right->parent = node;
+    node->parent = right;
+	right->left = node;
+	right->parent = parent;
+	PARENT_RESET(root, parent, node, right);
+	
+	
+	return right;
+}
+
+static inline struct m_avlnode * right_rotate(struct m_avlnode * node,
+                    struct m_avlnode **root)
+{
+    struct m_avlnode *left = node->left;
+	struct m_avlnode *parent = node->parent;
+    
+	node->left = left->right;
+	if (node->left) node->left->parent = node;
+    node->parent = left;
+	left->right = node;
+	left->parent = parent;
+	PARENT_RESET(root, parent, node, left);
+	
+	return left;
+}
+
+static inline struct m_avlnode * right_left_rotate(
+                    struct m_avlnode *node, struct m_avlnode **root)
+{
+    struct m_avlnode *right = node->right;
+	
+	if (LEFT_HEIGHT(right) > RIGHT_HEIGHT(right)) {
+		right = right_rotate(right, root);
+		HEIGHT_RESET(right->right);
+		HEIGHT_RESET(right);
+	}
+	
+	node = left_rotate(node, root);
+	HEIGHT_RESET(node->left);
+	HEIGHT_RESET(node);
+	
+	return node;
+}
+
+static inline struct m_avlnode * left_right_rotate(
+                    struct m_avlnode *node, struct m_avlnode **root)
+{
+    struct m_avlnode *left = node->left;
+	
+	if (RIGHT_HEIGHT(left) > LEFT_HEIGHT(left)) {
+		left = left_rotate(left, root);
+		HEIGHT_RESET(left->left);
+		HEIGHT_RESET(left);
+	}
+	
+	node = right_rotate(node, root);
+	HEIGHT_RESET(node->right);
+	HEIGHT_RESET(node);
+	
+	return node;
+}
+
+static void insert_rebalance(struct m_avlnode *node,
+                    struct m_avlnode **root)
+{
+    node->height = 1;
+    
+    for (node = node->parent; node; node = node->parent) {
+        int diff = (int)LEFT_HEIGHT(node) - (int)RIGHT_HEIGHT(node);
+		int height = MAX(LEFT_HEIGHT(node), RIGHT_HEIGHT(node)) + 1;
+		
+		if (node->height == height)
+		    break;
+		node->height = height;
+
+		if (diff <= -2)
+			node = right_left_rotate(node, root);
+		else if (diff >= 2)
+			node = left_right_rotate(node, root);
+	}
+}
+
+static void remove_rebalance(struct m_avlnode *node,
+                    struct m_avlnode **root)
+{
+    while (node) {
+		int diff = (int)LEFT_HEIGHT(node) - (int)RIGHT_HEIGHT(node);
+		int height = MAX(LEFT_HEIGHT(node), RIGHT_HEIGHT(node)) + 1;
+
+		/* height not change and height diff between -1 and 1 */
+		if (node->height != height)
+			node->height = height;
+		else if (diff >= -1 && diff <= 1)
+			break;
+
+        /* rebalance */
+		if (diff <= -2)
+			node = right_left_rotate(node, root);
+		else if (diff >= 2)
+			node = left_right_rotate(node, root);
+        
+		node = node->parent;
+	}
+}
+
+static void node_remove(struct m_avlnode *node, struct m_avlnode **root)
+{
+    struct m_avlnode *child = NULL;
+    struct m_avlnode *parent = NULL;
+    
+	if (node->left && node->right) {
+		struct m_avlnode *old = node;
+		struct m_avlnode *left = NULL;
+
+		/* find smallest child of right tree */
+		node = node->right;
+		while ((left = node->left) != NULL)
+			node = left;
+
+        /* replace smallest child of right tree to its right child */
+		child = node->right;
+		parent = node->parent;
+		if (child)
+			child->parent = parent;
+        PARENT_RESET(root,parent,node,child);
+
+		/* put smallest child of right tree to remove position */
+		if (node->parent == old)
+			parent = node;
+		node->left = old->left;
+		node->right = old->right;
+		node->parent = old->parent;
+		node->height = old->height;
+        PARENT_RESET(root,old->parent,old,node);
+		old->left->parent = node;
+		if (old->right)
+			old->right->parent = node;
+	} else {
+		if (node->left) 
+			child = node->left;
+		else
+			child = node->right;
+		parent = node->parent;
+        PARENT_RESET(root,parent,node,child);
+		if (child)
+			child->parent = parent;
+	}
+	
+	if (parent)
+		remove_rebalance(parent, root);
+}
+
 int m_avltree_init(struct m_avltree *tree, size_t offset)
 {
     if (!tree) return M_EINVAL;
@@ -33,7 +217,7 @@ int m_avltree_init(struct m_avltree *tree, size_t offset)
 int m_avltree_free(struct m_avltree *tree,
                     void (*cbk)(void *elem, void *udt), void *udt)
 {
-    if (!tree || !cbk) return M_EINVAL;
+    if (!tree) return M_EINVAL;
 
     struct m_avlnode *parent = NULL;
     struct m_avlnode *node = tree->root;
@@ -50,24 +234,26 @@ int m_avltree_free(struct m_avltree *tree,
         }
 
         parent = node->parent;
-        if (parent) {
-            /* cut off with parent */
-            if (parent->left == node)
-                parent->left = NULL;
-            else if (parent->right == node)
-                parent->right = NULL;
-            else
-                return M_EUNKNOWN;
-        } else {
+        if (!parent) {
             /* if parent is NULL, then it is root node */
+            if (cbk) cbk(NODE2ELEM(node,tree->offset), udt);
             tree->root = NULL;
             tree->offset = 0;
             tree->count = 0;
+            return 0;
         }
+        
+        /* cut off with parent */
+        if (parent->left == node)
+            parent->left = NULL;
+        else if (parent->right == node)
+            parent->right = NULL;
+        else
+            return M_EUNKNOWN;
 
         /* call callback function to free element */
         /* node->left = node->right = node->parent = node->height = 0; */
-        cbk(NODE2ELEM(node,tree->offset), udt);
+        if (cbk) cbk(NODE2ELEM(node,tree->offset), udt);
 
         /* upward to free */
         node = parent;        
@@ -76,473 +262,236 @@ int m_avltree_free(struct m_avltree *tree,
     return 0;
 }
 
-#if 0
-struct _sl_avltree {
-    void *elem;
-    struct _sl_avltree *left;
-    struct _sl_avltree *right;
-    struct _sl_avltree *parent;    /* pointing to node itself for empty node */
-    int height;                 /* equals to 1 + max height in childs */
-};
-
-#define replace_node(old,new,parent,root) \
-    do { \
-        if (parent) { \
-            if (parent->left == old) \
-                parent->left = new; \
-            else \
-                parent->right = new; \
-        } else { \
-            *root = new; \
-        } \
-    } while (0)
-
-#define left_height(node) (((node)->left)? ((node)->left)->height : 0)
-
-#define right_height(node) (((node)->right)? ((node)->right)->height : 0)
-
-#define reset_height(node) \
-	    (node->height = SL_MAX(left_height(node), right_height(node)) + 1)
-
-static inline sl_avltree node_alloc(sl_avltree parent, void *elem)
+int m_avltree_insert(struct m_avltree *tree, void *elem,
+                    int (*cbk)(void *ielem, void *elem, void *udt), void *udt)
 {
-    sl_avltree node = (sl_avltree)sl_malloc(sizeof(*node), NULL);
-    node->elem = elem;
-    node->parent = parent;
-    node->height = 0;
-    node->left = node->right = NULL;
+    int ret = 0;
+    struct m_avlnode *parent = NULL;
+    struct m_avlnode *newnode = ELEM2NODE(elem,tree->offset);
+    if (!tree || !elem || !cbk) return M_EINVAL;
 
-    return node;
-}
-
-static inline sl_avltree left_rotation(sl_avltree node, sl_avltree *root)
-{
-    sl_avltree right = node->right;
-	sl_avltree parent = node->parent;
-	node->right = right->left;
-	if (right->left) 
-		right->left->parent = node;
-	right->left = node;
-	right->parent = parent;
-	replace_node(node, right, parent, root);
-	node->parent = right;
-	
-	return right;
-}
-
-static inline sl_avltree right_rotation(sl_avltree node, sl_avltree *root)
-{
-    sl_avltree left = node->left;
-	sl_avltree parent = node->parent;
-	node->left = left->right;
-	if (left->right) 
-		left->right->parent = node;
-	left->right = node;
-	left->parent = parent;
-	replace_node(node, left, parent, root);
-	node->parent = left;
-	
-	return left;
-}
-
-static inline sl_avltree rotate_right(sl_avltree node, sl_avltree *root)
-{
-    sl_avltree right = node->right;
-	
-	if (left_height(right) > right_height(right)) {
-		right = right_rotation(right, root);
-		reset_height(right->right);
-		reset_height(right);
-	}
-	
-	node = left_rotation(node, root);
-	reset_height(node->left);
-	reset_height(node);
-	
-	return node;
-}
-
-static inline sl_avltree rotate_left(sl_avltree node, sl_avltree *root)
-{
-    sl_avltree left = node->left;
-	
-	if (right_height(left) > left_height(left)) {
-		left = left_rotation(left, root);
-		reset_height(left->left);
-		reset_height(left);
-	}
-	
-	node = right_rotation(node, root);
-	reset_height(node->right);
-	reset_height(node);
-	
-	return node;
-}
-
-static void insert_rebalance(sl_avltree node, sl_avltree *root)
-{
-    node->height = 1;
-    
-    for (node = node->parent; node; node = node->parent) {
-		int h0 = (int)left_height(node);
-		int h1 = (int)right_height(node);
-		int height = SL_MAX(h0, h1) + 1;
-		int diff = h0 - h1;
-		
-		if (node->height == height)
-		    break;
-		node->height = height;
-
-		if (diff <= -2) {
-			node = rotate_right(node, root);
-		}
-		else if (diff >= 2) {
-			node = rotate_left(node, root);
-		}
-	}
-}
-
-static void remove_rebalance(sl_avltree node, sl_avltree *root)
-{
-    while (node) {
-		int h0 = (int)left_height(node);
-		int h1 = (int)right_height(node);
-		int diff = h0 - h1;
-		int height = SL_MAX(h0, h1) + 1;
-
-		/* height not change and height diff between -1 and 1 */
-		if (node->height != height) {
-			node->height = height;
-		} else if (diff >= -1 && diff <= 1) {
-			break;
-		}
-
-        /* rebalance */
-		if (diff <= -2) {
-			node = rotate_right(node, root);
-		}
-		else if (diff >= 2) {
-			node = rotate_left(node, root);
-		}
-		node = node->parent;
-	}
-}
-
-static void node_remove(sl_avltree node, sl_avltree *root)
-{
-    sl_avltree child = NULL;
-    sl_avltree parent = NULL;
-    
-	if (node->left && node->right) {
-		sl_avltree old = node;
-		sl_avltree left = NULL;
-
-		/* find smallest child of right tree */
-		node = node->right;
-		while ((left = node->left) != NULL)
-			node = left;
-
-        /* replace smallest child of right tree to its right child */
-		child = node->right;
-		parent = node->parent;
-		if (child)
-			child->parent = parent;
-		replace_node(node, child, parent, root);
-
-		/* put smallest child of right tree to remove position */
-		if (node->parent == old)
-			parent = node;
-		node->left = old->left;
-		node->right = old->right;
-		node->parent = old->parent;
-		node->height = old->height;
-		replace_node(old, node, old->parent, root);
-		old->left->parent = node;
-		if (old->right) {
-			old->right->parent = node;
-		}
-	} else {
-		if (node->left == NULL) 
-			child = node->right;
-		else
-			child = node->left;
-		parent = node->parent;
-		replace_node(node, child, parent, root);
-		if (child) {
-			child->parent = parent;
-		}
-	}
-	
-	if (parent) {
-		remove_rebalance(parent, root);
-	}
-}
-
-int sl_avltree_insert(sl_avltree *pavl, void *elem,
-                int (*compare)(void *ielem, void *elem, void *udt), void *udt)
-{
-    sl_assert_return_val(pavl != NULL,SL_EINVAL,"args 'pavl' is NULL");
-    sl_assert_return_val(compare != NULL,SL_EINVAL,"args 'compare' is NULL");
-    sl_avltree *pnode = pavl;
-    sl_avltree parent = NULL;
-
+    newnode->left = NULL;
+    newnode->right = NULL;
+    newnode->parent = NULL;
+    newnode->height = 0;
     /* insert first node */
-    if (*pavl == NULL) {
-        *pavl = node_alloc(NULL, elem);
-        
-        return SL_SUCCESS;
+    if (!tree->root) {
+        tree->root = newnode;
+        return 0;
     }
 
-    while (*pnode) {
-        int ret = compare((*pnode)->elem, elem, udt);
-        parent = *pnode;
-        if (ret > 0)
-            pnode = &parent->left;
-        else if (ret < 0)
-            pnode = &parent->right;
-        else
-            return SL_EEXISTS;
-    }
-    
-    *pnode = node_alloc(parent, elem);
-    insert_rebalance(*pnode, pavl);
-
-    return SL_SUCCESS;
-}
-
-int sl_avltree_remove(sl_avltree *pavl, void *key,
-                int (*compare)(void *ielem, void *key, void *udt), void *udt)
-{
-    sl_assert_return_val(pavl != NULL,SL_EINVAL,"args 'pavl' is NULL");
-    sl_assert_return_val(compare != NULL,SL_EINVAL,"args 'compare' is NULL");
-
-    sl_avltree node = *pavl;
+    struct m_avlnode *node = tree->root;
     while (node) {
-        int ret = compare(node->elem, key, udt);
+        ret = cbk(NODE2ELEM(node,tree->offset), elem, udt);
+        parent = node;
         if (ret > 0)
             node = node->left;
         else if (ret < 0)
             node = node->right;
         else
-            break;
-    }
-    if (node) {
-        node_remove(node, pavl);
-        sl_free(node);
-    } else {
-        return SL_ENOTFOUND;
+            return M_EEXISTS;
     }
 
-    return SL_SUCCESS;
+    /* put node to correct position */
+    newnode->parent = parent;
+    if (ret > 0)
+        parent->left = newnode;
+    else
+        parent->right = newnode;
+
+    /* rebalance avltree */
+    insert_rebalance(newnode, &tree->root);
+
+    return 0;
 }
 
-void *sl_avltree_find(sl_avltree avl, void *key,
-                int (*compare)(void *ielem, void *key, void *udt), void *udt)
+int m_avltree_remove(struct m_avltree *tree, void *elem)
 {
-    sl_assert_return_val(compare != NULL,NULL,"args 'compare' is NULL");
+    if (!tree || !elem) return M_EINVAL;
 
-    sl_avltree node = avl;
+    struct m_avlnode *node = ELEM2NODE(elem,tree->offset);
+    node_remove(node, &tree->root);
+    node->left = NULL;
+    node->right = NULL;
+    node->parent = NULL;
+    node->height = 0;
+
+    return 0;
+}
+
+void *m_avltree_find(struct m_avltree *tree, void *key,
+                int (*cbk)(void *ielem, void *key, void *udt), void *udt)
+{
+    if (!tree || !cbk) return NULL;
+
+    struct m_avlnode *node = tree->root;
     while (node) {
-        int ret = compare(node->elem, key, udt);
+        int ret = cbk(NODE2ELEM(node,tree->offset), key, udt);
         if (ret > 0)
             node = node->left;
         else if (ret < 0)
             node = node->right;
         else
-            return node->elem;
+            return NODE2ELEM(node,tree->offset);
     }
     
     return NULL;
 }
 
-void *sl_avltree_prev(sl_avltree avl, void *key,
-                int (*compare)(void *ielem, void *key, void *udt), void *udt)
+void *m_avltree_prev(struct m_avltree *tree, void *elem)
 {
-    sl_assert_return_val(compare != NULL,NULL,"args 'compare' is NULL");
+    if (!tree || !elem) return NULL;
 
-    /* find node by key */
-    sl_avltree node = avl;
-    while (node) {
-        int ret = compare(node->elem, key, udt);
-        if (ret > 0)
-            node = node->left;
-        else if (ret < 0)
-            node = node->right;
-        else
-            break;
-    }
-    if (node == NULL)
-        return NULL;
+    struct m_avlnode *node = ELEM2NODE(elem,tree->offset);
         
 	if (node->left) {
 		node = node->left;
 		while (node->right) 
 			node = node->right;
 	} else {
-		while (1) {
-			sl_avltree last = node;
+        while (1) {
+			struct m_avlnode *child = node;
 			node = node->parent;
 			if (node == NULL)
 			    return NULL;
-			if (node->right == last)
+			if (node->right == child)
 			    break;
 		}
 	}
-	
-	return node->elem;
+
+    return NODE2ELEM(node,tree->offset);
 }
 
-void *sl_avltree_next(sl_avltree avl, void *key,
-                int (*compare)(void *ielem, void *key, void *udt), void *udt)
+void *m_avltree_next(struct m_avltree *tree, void *elem)
 {
-    sl_assert_return_val(compare != NULL,NULL,"args 'compare' is NULL");
+    if (!tree || !elem) return NULL;
 
-    /* find node by key */
-    sl_avltree node = avl;
-    while (node) {
-        int ret = compare(node->elem, key, udt);
-        if (ret > 0)
-            node = node->left;
-        else if (ret < 0)
-            node = node->right;
-        else
-            break;
-    }
-    if (node == NULL)
-        return NULL;
-        
-	if (node->right) {
+    struct m_avlnode *node = ELEM2NODE(elem,tree->offset);
+
+    if (node->right) {
 		node = node->right;
 		while (node->left) 
 			node = node->left;
 	} else {
-		while (1) {
-			sl_avltree last = node;
+        while (1) {
+			struct m_avlnode *child = node;
 			node = node->parent;
 			if (node == NULL)
 			    return NULL;
-			if (node->left == last)
+			if (node->left == child)
 			    break;
 		}
 	}
-	
-	return node->elem;
+
+    return NODE2ELEM(node,tree->offset);
 }
 
-void *sl_avltree_first(sl_avltree avl)
+void *m_avltree_first(struct m_avltree *tree)
 {
-    sl_avltree node = avl;
-    if (!node)
-        return NULL;
-        
+    if (!tree) return NULL;
+    if (!tree->root) return NULL;
+    
+    struct m_avlnode *node = tree->root;
     while (node->left)
         node = node->left;
 
-    return node->elem;
+    return NODE2ELEM(node,tree->offset);
 }
 
-void *sl_avltree_last(sl_avltree avl)
+void *m_avltree_last(struct m_avltree *tree)
 {
-    sl_avltree node = avl;
-    if (!node)
-        return NULL;
-        
+    if (!tree) return NULL;
+    if (!tree->root) return NULL;
+
+    struct m_avlnode *node = tree->root;
     while (node->right)
         node = node->right;
 
-    return node->elem;
+    return NODE2ELEM(node,tree->offset);
 }
 
-void sl_avltree_free(sl_avltree *pavl,
-                    void (*free)(void *elem, void *udt), void *udt)
+void *m_avltree_root(struct m_avltree *tree)
 {
-    if (!pavl)
-        return;
-    sl_avltree node = *pavl;
-    sl_avltree tmp = NULL;
+    if (!tree) return NULL;
+    if (!tree->root) return NULL;
 
-    while (node) {
-        /* find one leaf */
-        while (1) {
-            if (node->left)
-                node = node->left;
-            else if (node->right)
-                node = node->right;
-            else
-                break;
-        }
-
-        if (node->parent == NULL) {
-            if (free) free(node->elem, udt);
-            sl_free(node);
-            *pavl = NULL;
-            return;
-        } else {
-            if (node->parent->left == node)
-                node->parent->left = NULL;
-            else
-                node->parent->right = NULL;
-        
-            tmp = node->parent;
-            sl_free(node);
-            node = tmp;
-        }
-    }
+    return NODE2ELEM(tree->root,tree->offset);
 }
 
-int sl_avltree_judge(sl_avltree avl, int *height)
+static void avltree_inorder(size_t offset, struct m_avlnode *node,
+                    void (*cbk)(void *elem, void *udt), void *udt)
 {
-    if (!avl) {
+    if (!node) return;
+    avltree_inorder(offset, node->left, cbk, udt);
+    cbk(NODE2ELEM(node,offset), udt);
+    avltree_inorder(offset, node->right, cbk, udt);
+}
+
+void m_avltree_inorder(struct m_avltree *tree,
+                    void (*cbk)(void *elem, void *udt), void *udt)
+{
+    if (!tree || !cbk) return;
+
+    return avltree_inorder(tree->offset, tree->root, cbk, udt);
+}
+
+static void avltree_preorder(size_t offset, struct m_avlnode *node,
+                    void (*cbk)(void *elem, void *udt), void *udt)
+{
+    if (!node) return;
+    cbk(NODE2ELEM(node,offset), udt);
+    avltree_preorder(offset, node->left, cbk, udt);
+    avltree_preorder(offset, node->right, cbk, udt);
+}
+
+void m_avltree_preorder(struct m_avltree *tree,
+                    void (*cbk)(void *elem, void *udt), void *udt)
+{
+    if (!tree || !cbk) return;
+
+    return avltree_preorder(tree->offset, tree->root, cbk, udt);
+}
+
+static void avltree_postorder(size_t offset, struct m_avlnode *node,
+                    void (*cbk)(void *elem, void *udt), void *udt)
+{
+    if (!node) return;
+    avltree_postorder(offset, node->left, cbk, udt);
+    avltree_postorder(offset, node->right, cbk, udt);
+    cbk(NODE2ELEM(node,offset), udt);
+}
+
+void m_avltree_postorder(struct m_avltree *tree,
+                    void (*cbk)(void *elem, void *udt), void *udt)
+{
+    if (!tree || !cbk) return;
+
+    return avltree_postorder(tree->offset, tree->root, cbk, udt);
+}
+
+static int avltree_judge(struct m_avlnode *node, int *height)
+{
+    if (!node) {
         *height = 0;
-        return 1;
+        return 0;
     }
     
     int lheight;  
-    int lresult = sl_avltree_judge(avl->left, &lheight);  
+    int lresult = avltree_judge(node->left, &lheight);  
     int rheight;  
-    int rresult = sl_avltree_judge(avl->right, &rheight);
+    int rresult = avltree_judge(node->right, &rheight);
 
-    *height = SL_MAX(lheight, rheight) + 1;
-    if(lresult && rresult && SL_ABS(lheight - rheight) < 2)
-        return 1;  
+    *height = MAX(lheight, rheight) + 1;
+    if(!lresult && !rresult && ABS(lheight - rheight) < 2)
+        return 0;
     else
-        return 0;  
+        return -1;
 }
 
-#ifdef __SLLIB_H__
-void sl_avltree_print(sl_avltree avl,
-                    void (*func)(int newline, void *data))
+int m_avltree_judge(struct m_avltree *tree)
 {
-    int current = 0;
-    int next = 0;
-    sl_queue queue = NULL;
-    sl_assert_return(avl != NULL || func != NULL,"invalid arguments");
+    if (!tree) return M_EINVAL;
 
-    queue = sl_queue_create();
-
-    sl_queue_push_tail(queue, avl);
-    current = 1;
-    next = 0;
-    while (sl_queue_is_empty(queue) == SL_FALSE) {
-        sl_avltree node = sl_queue_pop_head(queue);
-        func(0, node->elem);
-        current--;
-
-        if (node->left) {
-            sl_queue_push_tail(queue, node->left);
-            next++;
-        }
-        if (node->right) {
-            sl_queue_push_tail(queue, node->right);
-            next++;
-        }
-
-        if (current == 0) {
-            func(1, NULL);
-            current = next;
-            next = 0;
-        }
-    }
+    int height = 0;
+    return avltree_judge(tree->root, &height);  
 }
-#endif
-#endif

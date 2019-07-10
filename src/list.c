@@ -13,10 +13,10 @@ int m_list_init(struct m_list *list, size_t offset)
     return 0;
 }
 
-void m_list_free(struct m_list *list,
+int m_list_free(struct m_list *list,
                     void (*cbk)(void *elem, void *udt), void *udt)
 {
-    if (!list) return;
+    if (!list) return M_EINVAL;
 
     /* find all element node, call free_cbk free them */
     struct m_listnode *node = list->head;
@@ -30,6 +30,8 @@ void m_list_free(struct m_list *list,
     list->offset = 0;
     list->head = list->tail = NULL;
     list->length = 0;
+
+    return 0;
 }
 
 int m_list_prepend(struct m_list *list, void *elem)

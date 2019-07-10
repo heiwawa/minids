@@ -81,6 +81,7 @@ int m_list_init(struct m_list *list, size_t offset);
  * @cbk     callback function use for free element memory
  *          NOTE! if NULL may cause memory leak
  * @udt     opaque pram to callback
+ * @return  0 success, M_EXXX otherwise
  * @sample  void cbk_free(void *elem, void *udt)
  *          {
  *              struct element *em = (struct element *)elem;
@@ -89,7 +90,7 @@ int m_list_init(struct m_list *list, size_t offset);
  *          }
  *          m_list_free(list, cbk_free, userdata);
 ********************************************************/
-void m_list_free(struct m_list *list,
+int m_list_free(struct m_list *list,
                     void (*cbk)(void *elem, void *udt), void *udt);
 
 /********************************************************
