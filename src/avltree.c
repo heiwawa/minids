@@ -3,6 +3,10 @@
 
 #include "avltree.h"
 
+#ifndef inline
+#define inline __inline
+#endif
+
 /********************************************************
  * @brief   get avlnode from element
  * @DATA    element instance addr
@@ -39,10 +43,6 @@
             *root = newnode; \
         } \
     } while (0)
-
-#ifndef inline
-#define inline __inline
-#endif
 
 static inline struct m_avlnode * left_rotate(struct m_avlnode *node,
                     struct m_avlnode **root)
@@ -265,42 +265,34 @@ int m_avltree_free(struct m_avltree *tree,
 int m_avltree_insert(struct m_avltree *tree, void *elem,
                     int (*cbk)(void *ielem, void *elem, void *udt), void *udt)
 {
-    int ret = 0;
+    struct m_avlnode **link = NULL;
     struct m_avlnode *parent = NULL;
-    struct m_avlnode *newnode = ELEM2NODE(elem,tree->offset);
+    struct m_avlnode *node = NULL;
     if (!tree || !elem || !cbk) return M_EINVAL;
 
-    newnode->left = NULL;
-    newnode->right = NULL;
-    newnode->parent = NULL;
-    newnode->height = 0;
-    /* insert first node */
-    if (!tree->root) {
-        tree->root = newnode;
-        return 0;
-    }
-
-    struct m_avlnode *node = tree->root;
-    while (node) {
-        ret = cbk(NODE2ELEM(node,tree->offset), elem, udt);
-        parent = node;
+    link = &tree->root;
+    while (*link) {
+        int ret = 0;
+        parent = *link;
+        ret =  cbk(NODE2ELEM(parent,tree->offset), elem, udt);
         if (ret > 0)
-            node = node->left;
+            link = &parent->left;
         else if (ret < 0)
-            node = node->right;
+            link = &parent->right;
         else
             return M_EEXISTS;
     }
 
-    /* put node to correct position */
-    newnode->parent = parent;
-    if (ret > 0)
-        parent->left = newnode;
-    else
-        parent->right = newnode;
+    node = ELEM2NODE(elem,tree->offset);
+    node->left = node->right = NULL;
+    node->parent = parent;
+    node->height = 0;
+    *link = node;
 
     /* rebalance avltree */
-    insert_rebalance(newnode, &tree->root);
+    insert_rebalance(node, &tree->root);
+    
+    tree->count++;
 
     return 0;
 }
