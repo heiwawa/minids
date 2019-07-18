@@ -307,6 +307,7 @@ int m_avltree_remove(struct m_avltree *tree, void *elem)
     node->right = NULL;
     node->parent = NULL;
     node->height = 0;
+    tree->count--;
 
     return 0;
 }

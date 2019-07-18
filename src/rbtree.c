@@ -347,6 +347,7 @@ int m_rbtree_remove(struct m_rbtree *tree, void *elem)
 colour:
     if (color == RB_BLACK)
         rbnode_remove_colour(child, parent, &tree->root);
+    tree->count--;
 
     return 0;
 }
