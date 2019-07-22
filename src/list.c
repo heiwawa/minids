@@ -85,7 +85,7 @@ size_t m_list_insert(struct m_list *list, void *elem, size_t pos)
         real_pos = list->length;
     } else {
         /* find node on the position */
-        int i = 1;
+        size_t i = 1;
         struct m_listnode *node = list->head;
         while (node) {
             if (pos == i) break;

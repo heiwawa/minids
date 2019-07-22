@@ -28,7 +28,9 @@ extern "C" {
 #define M_HEAP_INC      1 /* auto incrementally */
 #define M_HEAP_NOINC    0 /* no increment */
 
-typedef struct _m_heapnode m_heapnode;
+struct m_heapnode {
+    void *elem;
+};
 
 /********************************************************
  * @brief   heap struct define
@@ -61,7 +63,7 @@ struct m_heap {
     int flag;
     size_t maxnum;
     size_t num;
-    m_heapnode *array;
+    struct m_heapnode *array;
     int (*compare)(void *elem1, void *elem2, void *udt);
     void *udt;
 };

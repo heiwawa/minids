@@ -13,12 +13,9 @@
         heap->array[b].elem = tmp; \
     } while (0)
 
-struct _m_heapnode {
-    void *elem;
-};
-
-static void shift_up(struct m_heap *heap, int i)
+static void shift_up(struct m_heap *heap, size_t i)
 {
+    if (i <= 0) return;
     while (PARENT(i) >= 0) {
         int ret = heap->compare(heap->array[PARENT(i)].elem,heap->array[i].elem,
                             heap->udt);
@@ -26,16 +23,18 @@ static void shift_up(struct m_heap *heap, int i)
             (ret < 0 && heap->type == M_HEAP_MAX)) {
             SHIFT(PARENT(i),i);
             i = PARENT(i);
+            if (i <= 0)
+                break;
         } else {
             break;
         }
     }
 }
 
-static void shift_down(struct m_heap *heap, int i)
+static void shift_down(struct m_heap *heap, size_t i)
 {
     int ret = 0;
-    int shift = 0;
+    size_t shift = 0;
     while (LCHILD(i) < heap->num) {
         shift = LCHILD(i);
         /* compare left right child first */
@@ -66,7 +65,7 @@ int m_heap_init(struct m_heap *heap, int type, int flag, size_t maxnum,
         (flag !=M_HEAP_NOINC && flag !=M_HEAP_INC) || maxnum <= 0 || !compare)
         return M_EINVAL;
 
-    heap->array = (m_heapnode *)malloc(sizeof(m_heapnode)*maxnum);
+    heap->array = (struct m_heapnode *)malloc(sizeof(struct m_heapnode)*maxnum);
     if (heap->array == NULL)
         return M_EMALLOC;
     
@@ -83,7 +82,7 @@ int m_heap_init(struct m_heap *heap, int type, int flag, size_t maxnum,
 void m_heap_free(struct m_heap *heap,
                     void (*cbk)(void *elem, void *udt), void *udt)
 {
-    int i = 0;
+    size_t i = 0;
     if (!heap) return;
 
     if (cbk)
@@ -102,19 +101,19 @@ void m_heap_free(struct m_heap *heap,
 int m_heap_insert(struct m_heap *heap, void *elem)
 {
     if (!heap) return M_EINVAL;
-    
+
     if (heap->num >= heap->maxnum) {
         if (heap->flag == M_HEAP_NOINC) {
             return M_ETOOMANY;
         } else {
             /* reallocate memory */
             size_t newsize = heap->maxnum * 2;
-            void *p = realloc(heap->array, sizeof(m_heapnode)*newsize);
+            void *p = realloc(heap->array, sizeof(struct m_heapnode)*newsize);
             if (!p)
                 return M_EMALLOC;
             
             heap->maxnum = newsize;
-            heap->array = (struct _m_heapnode *)p;
+            heap->array = (struct m_heapnode *)p;
         }
     }
 
@@ -149,7 +148,7 @@ void *m_heap_pop(struct m_heap *heap)
 
 int m_heap_remove(struct m_heap *heap, void *elem)
 {
-    int i = 0;
+    size_t i = 0;
     int ret = 0;
     if (!heap) return M_EINVAL;
 
@@ -179,7 +178,7 @@ int m_heap_remove(struct m_heap *heap, void *elem)
 }
 
 int m_heap_judge(struct m_heap *heap) {
-    int i = 0;
+    size_t i = 0;
     int ret = 0;
     if (!heap) return -1;
     
